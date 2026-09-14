@@ -1,5 +1,6 @@
 import pandas as pd
 import random
+import heapq
 
 TEMPO_MAXIMO_ENTRADA = 30
 QUANTIDADE_GARCONETES = 2
@@ -47,8 +48,7 @@ atendimentos = []
 garconete_1_livre = 0
 garconete_2_livre = 0
 
-
-for cliente in clientes:
+for cliente in []:
     cliente_id = cliente["Cliente"]
     chegada = cliente["Chegada"]
     sede_inicial = cliente["Sede"]
@@ -123,6 +123,87 @@ for cliente in clientes:
             tempo_cliente = fim_beber
 
         numero_drink += 1
+
+
+# Eventos futuros: chegada ao pub ou retorno apos beber.
+# A segunda chave e aleatoria e so desempata entradas no mesmo minuto.
+eventos = []
+sequencia = 0
+for cliente in clientes:
+    heapq.heappush(eventos, (
+        cliente["Chegada"], random.random(), sequencia,
+        cliente["Cliente"], cliente["Chegada"], cliente["Sede"],
+        cliente["Sede"], 1
+    ))
+    sequencia += 1
+
+# Clientes aguardam em uma fila FIFO; cada garconete volta a esta estrutura
+# quando termina de encher o copo atual.
+fila = []
+garconetes_livres = [(0, 1), (0, 2)]
+atendimentos = []
+
+while eventos or fila:
+    proxima_garconete_livre = garconetes_livres[0][0]
+
+    # Se ninguem aguarda, a garconete espera pelo proximo instante de entrada.
+    # Clientes que entram exatamente juntos sao desempatatados pela chave
+    # aleatoria incluida no evento.
+    if not fila and eventos:
+        proxima_entrada = eventos[0][0]
+        while eventos and eventos[0][0] == proxima_entrada:
+            heapq.heappush(fila, heapq.heappop(eventos))
+
+    # Todos que chegaram enquanto a proxima garconete estava ocupada aguardam,
+    # preservando a ordem FIFO.
+    while fila and eventos and eventos[0][0] <= proxima_garconete_livre:
+        heapq.heappush(fila, heapq.heappop(eventos))
+
+    tempo_livre, garconete = heapq.heappop(garconetes_livres)
+    (
+        entrada_fila, _, _, cliente_id, chegada, sede_inicial,
+        sede_atual, numero_drink
+    ) = heapq.heappop(fila)
+
+    inicio_encher = max(tempo_livre, entrada_fila)
+    tempo_encher = max(1, round(random.gauss(6, 1)))
+    fim_encher = inicio_encher + tempo_encher
+    heapq.heappush(garconetes_livres, (fim_encher, garconete))
+
+    tempo_beber = random.randint(5, 8)
+    inicio_beber = fim_encher
+    fim_beber = inicio_beber + tempo_beber
+    sede_restante = sede_atual - 1
+
+    tempo_lavar = 5
+    inicio_lavar = fim_beber
+    fim_lavar = inicio_lavar + tempo_lavar
+
+    atendimentos.append({
+        "Cliente": cliente_id,
+        "Drink": numero_drink,
+        "Chegada": chegada,
+        "Sede inicial": sede_inicial,
+        "Garconete": garconete,
+        "Inicio encher": inicio_encher,
+        "Tempo encher": tempo_encher,
+        "Fim encher": fim_encher,
+        "Inicio beber": inicio_beber,
+        "Tempo beber": tempo_beber,
+        "Fim beber": fim_beber,
+        "Sede restante": sede_restante,
+        "Inicio lavar": inicio_lavar,
+        "Tempo lavar": tempo_lavar,
+        "Fim lavar": fim_lavar
+    })
+
+    # Ao terminar o drink, o cliente volta ao fim da fila se ainda tem sede.
+    if sede_restante > 0:
+        heapq.heappush(eventos, (
+            fim_beber, random.random(), sequencia, cliente_id, chegada,
+            sede_inicial, sede_restante, numero_drink + 1
+        ))
+        sequencia += 1
 
 
 # ==========================================================
