@@ -148,9 +148,14 @@ for cliente in clientes:
 
 fila = []
 copos_sujos = []
-garconetes_livres = [(0, 1), (0, 2)]
+# A segunda chave desempata aleatoriamente quando as duas ficam livres juntas.
+garconetes_livres = [(0, random.random(), 1), (0, random.random(), 2)]
 copos_limpos = COPOS_LIMPOS_INICIAIS
 modo_lavagem = False
+# Mantem clientes que ja chegaram e ainda nao terminaram o ultimo drink.
+clientes_no_pub = set()
+# Clientes cujo ultimo pedido ainda nao foi completamente servido.
+clientes_com_pedidos_pendentes = set()
 atendimentos = []
 
 def adicionar_evento(tempo, tipo, dados):
@@ -166,19 +171,27 @@ def processar_eventos_ate(tempo):
 
         if tipo == "cliente":
             cliente_id, chegada, sede_inicial, sede_atual, numero_drink = dados
+            if numero_drink == 1:
+                clientes_no_pub.add(cliente_id)
+                clientes_com_pedidos_pendentes.add(cliente_id)
             # A chave aleatoria so e usada se dois clientes entram juntos.
             heapq.heappush(fila, (
                 instante, random.random(), sequencia, cliente_id, chegada,
                 sede_inicial, sede_atual, numero_drink
             ))
         elif tipo == "copo_sujo":
-            copos_sujos.append(dados)
+            atendimento, cliente_saiu = dados
+            copos_sujos.append(atendimento)
+            if cliente_saiu:
+                clientes_no_pub.discard(atendimento["Cliente"])
+        elif tipo == "pedido_final_servido":
+            clientes_com_pedidos_pendentes.discard(dados)
         else:  # lavagem_concluida
             copos_limpos += 1
 
 
 while eventos or fila or copos_sujos:
-    tempo_livre, garconete = heapq.heappop(garconetes_livres)
+    tempo_livre, _, garconete = heapq.heappop(garconetes_livres)
     processar_eventos_ate(tempo_livre)
 
     # Uma garconete ociosa aguarda o proximo evento antes de decidir a tarefa.
@@ -191,16 +204,19 @@ while eventos or fila or copos_sujos:
     elif copos_limpos >= META_DE_COPOS_LIMPOS:
         modo_lavagem = False
 
-    # Depois que nao ha mais clientes (na fila, bebendo ou para chegar), a
-    # simulacao entra na limpeza final e lava todos os copos utilizados.
-    limpeza_final = (
+    # A limpeza pode comecar quando todos os pedidos finais ja foram
+    # completamente enchidos: nao ha ninguem na fila, nem alguem que voltara
+    # para pedir outro drink, nem novas chegadas previstas.
+    limpeza_apos_ultimos_pedidos = (
         not fila
+        and not clientes_com_pedidos_pendentes
         and not any(evento[2] == "cliente" for evento in eventos)
     )
 
     # Durante o funcionamento, lavar so ocorre no estoque critico. No fim,
-    # todos os copos sujos sao lavados, independentemente do estoque limpo.
-    deve_lavar = copos_sujos and (modo_lavagem or limpeza_final)
+    # ou apos os ultimos pedidos, todos os copos sujos sao lavados,
+    # independentemente do estoque limpo.
+    deve_lavar = copos_sujos and (modo_lavagem or limpeza_apos_ultimos_pedidos)
     if deve_lavar:
         atendimento = copos_sujos.pop(0)
         inicio_lavar = tempo_livre
@@ -209,14 +225,19 @@ while eventos or fila or copos_sujos:
         atendimento["Tempo lavar"] = TEMPO_LAVAR_COPO
         atendimento["Fim lavar"] = fim_lavar
         adicionar_evento(fim_lavar, "lavagem_concluida", None)
-        heapq.heappush(garconetes_livres, (fim_lavar, garconete))
+        heapq.heappush(
+            garconetes_livres, (fim_lavar, random.random(), garconete)
+        )
         continue
 
     # No modo critico, sem copo sujo para lavar, a garconete espera o proximo
     # copo terminar de ser usado; novos clientes continuam na fila.
     if modo_lavagem:
         if eventos:
-            heapq.heappush(garconetes_livres, (eventos[0][0], garconete))
+            heapq.heappush(
+                garconetes_livres,
+                (eventos[0][0], random.random(), garconete)
+            )
             continue
         break
 
@@ -224,14 +245,20 @@ while eventos or fila or copos_sujos:
     # lava copos enquanto ainda houver clientes no pub.
     if not fila:
         if eventos:
-            heapq.heappush(garconetes_livres, (eventos[0][0], garconete))
+            heapq.heappush(
+                garconetes_livres,
+                (eventos[0][0], random.random(), garconete)
+            )
             continue
         break
 
     # Se nao ha copos limpos, aguarda uma lavagem terminar.
     if copos_limpos == 0:
         if eventos:
-            heapq.heappush(garconetes_livres, (eventos[0][0], garconete))
+            heapq.heappush(
+                garconetes_livres,
+                (eventos[0][0], random.random(), garconete)
+            )
             continue
         break
 
@@ -244,12 +271,16 @@ while eventos or fila or copos_sujos:
     copos_limpos -= 1
     tempo_encher = max(1, round(random.gauss(6, 1)))
     fim_encher = inicio_encher + tempo_encher
-    heapq.heappush(garconetes_livres, (fim_encher, garconete))
+    heapq.heappush(
+        garconetes_livres, (fim_encher, random.random(), garconete)
+    )
 
     tempo_beber = random.randint(5, 8)
     inicio_beber = fim_encher
     fim_beber = inicio_beber + tempo_beber
     sede_restante = sede_atual - 1
+    if sede_restante == 0:
+        adicionar_evento(fim_encher, "pedido_final_servido", cliente_id)
 
     atendimento = {
         "Cliente": cliente_id,
@@ -269,7 +300,9 @@ while eventos or fila or copos_sujos:
         "Fim lavar": None
     }
     atendimentos.append(atendimento)
-    adicionar_evento(fim_beber, "copo_sujo", atendimento)
+    adicionar_evento(
+        fim_beber, "copo_sujo", (atendimento, sede_restante == 0)
+    )
 
     if sede_restante > 0:
         adicionar_evento(
@@ -281,6 +314,20 @@ while eventos or fila or copos_sujos:
 # ==========================================================
 # DATAFRAMES
 # ==========================================================
+
+# Para facilitar a leitura da planilha, a chegada aparece somente na primeira
+# linha de cada cliente. Campos de lavagem sem uma lavagem agendada ficam "-".
+clientes_com_chegada_registrada = set()
+for atendimento in atendimentos:
+    cliente_id = atendimento["Cliente"]
+    if cliente_id in clientes_com_chegada_registrada:
+        atendimento["Chegada"] = "-"
+    else:
+        clientes_com_chegada_registrada.add(cliente_id)
+
+    for campo_lavagem in ("Inicio lavar", "Tempo lavar", "Fim lavar"):
+        if atendimento[campo_lavagem] is None:
+            atendimento[campo_lavagem] = "-"
 
 # Inicia o pandas DataFrame com os clientes e atendimentos
 df_clientes = pd.DataFrame(clientes)
