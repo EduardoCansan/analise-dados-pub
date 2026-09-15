@@ -6,6 +6,64 @@ TEMPO_MAXIMO_ENTRADA = 30
 QUANTIDADE_GARCONETES = 2
 QUANTIDADE_COPOS = 20
 
+# ==========================================================
+# TABELAS FORNECIDAS NO ENUNCIADO
+# CORRECAO: os numeros usados na simulacao devem vir dessas tabelas
+# (o enunciado pede "utilize a tabela abaixo"), e nao de random.*.
+# ==========================================================
+TABELA_CHEGADA = [
+    1, 10, 15, 6, 2, 2, 2, 1, 11, 0,
+    5, 13, 6, 0, 11, 5, 1, 20, 4, 12,
+    3, 2, 8, 1, 1, 3, 1, 2, 10, 5,
+    5, 11, 1, 1, 20, 7, 6, 10, 4, 23,
+    1, 12, 2, 7, 1, 4, 4, 1, 3, 0,
+    5, 3, 2, 6,
+]
+TABELA_ENCHER = [
+    5, 5, 6, 5, 5, 5, 6, 6, 6, 6,
+    3, 5, 7, 5, 6, 6, 7, 6, 6, 7,
+    6, 6, 5, 6, 6, 6, 7, 6, 7, 6,
+    6, 5, 6, 6, 6, 5, 4, 4, 6, 4,
+    6, 4, 6, 7, 7, 6, 6, 6, 6, 6,
+    6, 6, 6, 7, 7, 7, 6, 5, 6, 6,
+    5, 6, 7, 5, 6, 6, 6, 6, 6, 6,
+]
+TABELA_BEBER = [
+    7, 7, 6, 7, 7, 8, 8, 6, 8, 8,
+    8, 7, 8, 5, 8, 8, 6, 6, 5, 5,
+    7, 6, 7, 8, 6, 7, 5, 5, 7, 6,
+    8, 6, 5, 7, 6, 8, 7, 8, 7, 7,
+    6, 8, 5, 6, 8, 6, 8, 6, 5, 5,
+    8, 6, 5, 5, 5, 6, 8, 5, 8, 6,
+    6, 8, 8, 5, 7,
+]
+TABELA_SEDE = [
+    4, 2, 1, 2, 2, 1, 2, 2, 1, 2,
+    4, 1, 3, 3, 4, 4, 1, 2, 4, 1,
+    2, 1, 1, 2, 2, 3, 2, 1, 1, 2,
+    1, 2, 4, 4, 1, 3, 2, 1, 2, 1,
+    2, 4, 2, 3, 2, 4, 1, 1, 4, 3,
+    4, 2, 4, 4, 3, 3, 3, 3, 3, 1,
+    4, 1, 1, 1, 4, 2, 1, 1, 1, 2,
+]
+
+# Para gerar a Simulacao B depois, mude este numero (ex.: para a
+# quantidade de valores que a Simulacao A consumiu de cada tabela) e
+# rode o script de novo, assim as duas simulacoes nao repetem os
+# mesmos numeros das tabelas.
+DESLOCAMENTO_TABELAS = 0
+if DESLOCAMENTO_TABELAS:
+    TABELA_CHEGADA = TABELA_CHEGADA[DESLOCAMENTO_TABELAS:] + TABELA_CHEGADA[:DESLOCAMENTO_TABELAS]
+    TABELA_ENCHER = TABELA_ENCHER[DESLOCAMENTO_TABELAS:] + TABELA_ENCHER[:DESLOCAMENTO_TABELAS]
+    TABELA_BEBER = TABELA_BEBER[DESLOCAMENTO_TABELAS:] + TABELA_BEBER[:DESLOCAMENTO_TABELAS]
+    TABELA_SEDE = TABELA_SEDE[DESLOCAMENTO_TABELAS:] + TABELA_SEDE[:DESLOCAMENTO_TABELAS]
+
+# Indices que avancam conforme os valores das tabelas vao sendo usados.
+chegada_indice = 0
+encher_indice = 0
+beber_indice = 0
+sede_indice = 0
+
 clientes = []
 tempo_atual = 0
 numero_cliente = 1
@@ -15,8 +73,10 @@ numero_cliente = 1
 # ==========================================================
 
 while True:
-    # Exponencial com média de 5 minutos (vária de 4 - 5 - 6 minutos)
-    tempo_entre_chegadas = round(random.expovariate(1 / 5))
+    # CORRECAO: le da tabela de distribuicao exponencial (media 5) fornecida
+    # no enunciado, em vez de sortear com random.expovariate.
+    tempo_entre_chegadas = TABELA_CHEGADA[chegada_indice]
+    chegada_indice += 1
 
     # Tempo atual é atualizado com o tempo entre chegadas do próximo cliente
     tempo_atual = tempo_atual + tempo_entre_chegadas
@@ -25,8 +85,10 @@ while True:
     if tempo_atual > TEMPO_MAXIMO_ENTRADA:
         break
 
-    # Quantidade de drinks entre 1 e 4
-    sede = random.randint(1, 4)
+    # CORRECAO: le da tabela de distribuicao uniforme (1 a 4) fornecida no
+    # enunciado, em vez de sortear com random.randint.
+    sede = TABELA_SEDE[sede_indice]
+    sede_indice += 1
 
     # Adiciona o cliente à lista de clientes com suas informações
     clientes.append({
@@ -42,95 +104,19 @@ while True:
 # ==========================================================
 # SIMULACAO DOS ATENDIMENTOS
 # ==========================================================
+# CORRECAO: o bloco anterior (um "for cliente in []:") nunca executava,
+# pois a lista estava vazia - era codigo morto de uma versao anterior do
+# algoritmo. Foi removido; a simulacao de verdade e a baseada em eventos
+# logo abaixo.
 
-# Mantem a quantidade de atendentes para saber quando cada um estará livre para atender o próximo cliente
 atendimentos = []
-garconete_1_livre = 0
-garconete_2_livre = 0
-
-for cliente in []:
-    cliente_id = cliente["Cliente"]
-    chegada = cliente["Chegada"]
-    sede_inicial = cliente["Sede"]
-
-    sede = sede_inicial
-    tempo_cliente = chegada
-    numero_drink = 1
-
-    while sede > 0:
-        # Escolhe a garçonete que ficará livre primeiro
-        if garconete_1_livre <= garconete_2_livre:
-            garconete = 1
-            tempo_livre = garconete_1_livre
-        else:
-            garconete = 2
-            tempo_livre = garconete_2_livre
-
-        # Cliente começa a ser atendido quando ele
-        # e a garçonete estiverem disponíveis
-        inicio_encher = max(tempo_cliente, tempo_livre)
-
-        # Normal com média 6 e desvio padrão 1 (mesma coisa com a entrada varia entre 5, 6 e 7 minutos)
-        tempo_encher = round(random.gauss(6, 1))
-
-        if tempo_encher < 1:
-            tempo_encher = 1
-
-        fim_encher = inicio_encher + tempo_encher
-
-        # Atualiza disponibilidade da garçonete novamente
-        if garconete == 1:
-            garconete_1_livre = fim_encher
-        else:
-            garconete_2_livre = fim_encher
-
-        # Uniforme entre 5 e 8 minutos (mesma coisa  das vezes anteriores, idenpendete da quantidade de drinks isso)
-        tempo_beber = random.randint(5, 8)
-
-        inicio_beber = fim_encher
-        fim_beber = inicio_beber + tempo_beber
-
-        # Cliente consumiu um drink
-        sede = sede - 1
-
-        # Lavagem fixa em 5 minutos (não varia, independente da quantidade de drinks), bom que tem vários copos na fila (20)
-        tempo_lavar = 5
-
-        inicio_lavar = fim_beber
-        fim_lavar = inicio_lavar + tempo_lavar
-
-        # Aqui é verificado o atendimento e a passagem do cliente pelo pub
-        atendimentos.append({
-            "Cliente": cliente_id,
-            "Drink": numero_drink,
-            "Chegada": chegada,
-            "Sede inicial": sede_inicial,
-            "Garconete": garconete,
-            "Inicio encher": inicio_encher,
-            "Tempo encher": tempo_encher,
-            "Fim encher": fim_encher,
-            "Inicio beber": inicio_beber,
-            "Tempo beber": tempo_beber,
-            "Fim beber": fim_beber,
-            "Sede restante": sede,
-            "Inicio lavar": inicio_lavar,
-            "Tempo lavar": tempo_lavar,
-            "Fim lavar": fim_lavar
-        })
-
-        # Se ainda tem sede, volta para atendimento
-        if sede > 0:
-            tempo_cliente = fim_beber
-
-        numero_drink += 1
-
 
 # ESTOQUE DE COPOS E SIMULACAO DOS ATENDIMENTOS
 # ==========================================================
 
 # Um copo e retirado do estoque limpo ao iniciar o atendimento. Ao terminar
 # de beber, ele vira sujo e so retorna ao estoque quando a lavagem acaba.
-COPOS_LIMPOS_INICIAIS = 30
+COPOS_LIMPOS_INICIAIS = QUANTIDADE_COPOS  # CORRECAO: enunciado pede 20, nao 30
 LIMITE_PARA_LAVAR = 2
 META_DE_COPOS_LIMPOS = 10
 TEMPO_LAVAR_COPO = 5
@@ -205,19 +191,23 @@ while eventos or fila or copos_sujos:
         tempo_livre = eventos[0][0]
         processar_eventos_ate(tempo_livre)
 
-    if copos_limpos <= LIMITE_PARA_LAVAR:
-        modo_lavagem = True
-    elif copos_limpos >= META_DE_COPOS_LIMPOS:
-        modo_lavagem = False
-
-    # Durante o funcionamento, lavar so ocorre no estoque critico. No fim,
-    # quando a limpeza final e autorizada, todos os copos sujos sao lavados,
-    # independentemente do estoque limpo.
-    deve_lavar = copos_sujos and (modo_lavagem or limpeza_final_autorizada)
+    # CORRECAO: o enunciado pede prioridade estrita pela numeracao das
+    # atividades (Encher = 2, Lavar = 4). Antes, a garconete so lavava
+    # quando o estoque de copos ficava critico (<=2), o que quase nunca
+    # acontecia (30 copos para poucos clientes) - por isso toda a lavagem
+    # acabava empurrada para o final, em vez de intercalada com o
+    # atendimento. Agora ela so lava quando NAO consegue encher agora
+    # (ninguem na fila, ou sem copo limpo disponivel).
+    pode_encher = bool(fila) and copos_limpos > 0
+    deve_lavar = bool(copos_sujos) and not pode_encher
     if deve_lavar:
         atendimento = copos_sujos.pop(0)
         inicio_lavar = tempo_livre
         fim_lavar = inicio_lavar + TEMPO_LAVAR_COPO
+        # CORRECAO: quem lava pode ser uma garconete diferente da que
+        # encheu o copo - por isso a lavagem fica numa coluna propria,
+        # em vez de sobrescrever "Garconete" (que registra quem encheu).
+        atendimento["Garconete lavagem"] = garconete
         atendimento["Inicio lavar"] = inicio_lavar
         atendimento["Tempo lavar"] = TEMPO_LAVAR_COPO
         atendimento["Fim lavar"] = fim_lavar
@@ -266,13 +256,19 @@ while eventos or fila or copos_sujos:
 
     inicio_encher = max(tempo_livre, entrada_fila)
     copos_limpos -= 1
-    tempo_encher = max(1, round(random.gauss(6, 1)))
+    # CORRECAO: le da tabela de distribuicao normal (media 6, desvio 1)
+    # fornecida no enunciado, em vez de sortear com random.gauss.
+    tempo_encher = max(1, TABELA_ENCHER[encher_indice])
+    encher_indice += 1
     fim_encher = inicio_encher + tempo_encher
     heapq.heappush(
         garconetes_livres, (fim_encher, random.random(), garconete)
     )
 
-    tempo_beber = random.randint(5, 8)
+    # CORRECAO: le da tabela de distribuicao uniforme (5 a 8) fornecida no
+    # enunciado, em vez de sortear com random.randint.
+    tempo_beber = TABELA_BEBER[beber_indice]
+    beber_indice += 1
     inicio_beber = fim_encher
     fim_beber = inicio_beber + tempo_beber
     sede_restante = sede_atual - 1
@@ -292,6 +288,7 @@ while eventos or fila or copos_sujos:
         "Tempo beber": tempo_beber,
         "Fim beber": fim_beber,
         "Sede restante": sede_restante,
+        "Garconete lavagem": None,
         "Inicio lavar": None,
         "Tempo lavar": None,
         "Fim lavar": None
@@ -322,7 +319,7 @@ for atendimento in atendimentos:
     else:
         clientes_com_chegada_registrada.add(cliente_id)
 
-    for campo_lavagem in ("Inicio lavar", "Tempo lavar", "Fim lavar"):
+    for campo_lavagem in ("Garconete lavagem", "Inicio lavar", "Tempo lavar", "Fim lavar"):
         if atendimento[campo_lavagem] is None:
             atendimento[campo_lavagem] = "-"
 
