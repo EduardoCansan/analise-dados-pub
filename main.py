@@ -154,8 +154,11 @@ copos_limpos = COPOS_LIMPOS_INICIAIS
 modo_lavagem = False
 # Mantem clientes que ja chegaram e ainda nao terminaram o ultimo drink.
 clientes_no_pub = set()
-# Clientes cujo ultimo pedido ainda nao foi completamente servido.
+# Clientes que ainda podem precisar entrar novamente na fila para outro drink.
 clientes_com_pedidos_pendentes = set()
+# So libera a limpeza final quando um ultimo drink termina de ser bebido e
+# nenhum cliente restante podera pedir outro.
+limpeza_final_autorizada = False
 atendimentos = []
 
 def adicionar_evento(tempo, tipo, dados):
@@ -165,7 +168,7 @@ def adicionar_evento(tempo, tipo, dados):
 
 
 def processar_eventos_ate(tempo):
-    global copos_limpos
+    global copos_limpos, limpeza_final_autorizada
     while eventos and eventos[0][0] <= tempo:
         instante, _, tipo, dados = heapq.heappop(eventos)
 
@@ -184,8 +187,11 @@ def processar_eventos_ate(tempo):
             copos_sujos.append(atendimento)
             if cliente_saiu:
                 clientes_no_pub.discard(atendimento["Cliente"])
-        elif tipo == "pedido_final_servido":
-            clientes_com_pedidos_pendentes.discard(dados)
+                if (
+                    not clientes_com_pedidos_pendentes
+                    and not any(evento[2] == "cliente" for evento in eventos)
+                ):
+                    limpeza_final_autorizada = True
         else:  # lavagem_concluida
             copos_limpos += 1
 
@@ -204,19 +210,10 @@ while eventos or fila or copos_sujos:
     elif copos_limpos >= META_DE_COPOS_LIMPOS:
         modo_lavagem = False
 
-    # A limpeza pode comecar quando todos os pedidos finais ja foram
-    # completamente enchidos: nao ha ninguem na fila, nem alguem que voltara
-    # para pedir outro drink, nem novas chegadas previstas.
-    limpeza_apos_ultimos_pedidos = (
-        not fila
-        and not clientes_com_pedidos_pendentes
-        and not any(evento[2] == "cliente" for evento in eventos)
-    )
-
     # Durante o funcionamento, lavar so ocorre no estoque critico. No fim,
-    # ou apos os ultimos pedidos, todos os copos sujos sao lavados,
+    # quando a limpeza final e autorizada, todos os copos sujos sao lavados,
     # independentemente do estoque limpo.
-    deve_lavar = copos_sujos and (modo_lavagem or limpeza_apos_ultimos_pedidos)
+    deve_lavar = copos_sujos and (modo_lavagem or limpeza_final_autorizada)
     if deve_lavar:
         atendimento = copos_sujos.pop(0)
         inicio_lavar = tempo_livre
@@ -280,7 +277,7 @@ while eventos or fila or copos_sujos:
     fim_beber = inicio_beber + tempo_beber
     sede_restante = sede_atual - 1
     if sede_restante == 0:
-        adicionar_evento(fim_encher, "pedido_final_servido", cliente_id)
+        clientes_com_pedidos_pendentes.discard(cliente_id)
 
     atendimento = {
         "Cliente": cliente_id,
